@@ -1,0 +1,34 @@
+[phases.setup]
+nixPkgs = [
+  'nodejs_18',
+  'glib',
+  'nspr',
+  'nss',
+  'dbus',
+  'atk',
+  'cups',
+  'gtk3',
+  'libdrm',
+  'xorg.libX11',
+  'xorg.libXcomposite', 
+  'xorg.libXdamage',
+  'xorg.libXext',
+  'xorg.libXfixes',
+  'xorg.libXrandr',
+  'mesa',
+  'expat',
+  'at-spi2-atk',
+  'xorg.libxcb',
+  'libxkbcommon',
+  'alsa-lib'
+]
+
+[phases.install]
+cmds = ['npm ci']
+
+[phases.setup-playwright]
+dependsOn = ['install']
+cmds = ['npx playwright install --with-deps chromium']
+
+[start]
+cmd = 'node server.js'
