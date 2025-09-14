@@ -50,7 +50,11 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Install Playwright and Chromium with all dependencies
-RUN npx playwright install --with-deps chromium
+RUN npm install -g playwright
+RUN playwright install --with-deps chromium
+
+# Ensure browsers are installed correctly
+RUN ls -la ~/.cache/ms-playwright/ || echo "No playwright cache found"
 
 # Copy the rest of the application code
 COPY . .
