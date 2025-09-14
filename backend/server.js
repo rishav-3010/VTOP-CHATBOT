@@ -377,7 +377,21 @@ async function loginToVTOP() {
       await globalBrowser.close();
     }
 
-    globalBrowser = await chromium.launch({ headless: true });
+    globalBrowser = await chromium.launch({ 
+  headless: true,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-web-security',
+    '--disable-features=VizDisplayCompositor',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process'
+  ]
+});
+
     globalPage = await globalBrowser.newPage();
     globalPage.setDefaultTimeout(240000);
 
