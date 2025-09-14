@@ -52,6 +52,9 @@ RUN npm ci --only=production
 # Install Playwright and Chromium with all dependencies
 RUN npx playwright install --with-deps chromium
 
+# Verify Chromium installation
+RUN npx playwright browser-check chromium
+
 # Copy the rest of the application code
 COPY . .
 

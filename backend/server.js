@@ -377,7 +377,8 @@ async function loginToVTOP() {
       await globalBrowser.close();
     }
 
-// Replace the browser launch configuration in your loginToVTOP function
+// Replace your current browser launch code in the loginToVTOP function with this:
+
 globalBrowser = await chromium.launch({ 
   headless: true,
   args: [
@@ -394,7 +395,6 @@ globalBrowser = await chromium.launch({
     '--disable-extensions',
     '--disable-plugins',
     '--disable-images',
-    '--disable-javascript',
     '--disable-default-apps',
     '--disable-sync',
     '--disable-translate',
@@ -404,8 +404,8 @@ globalBrowser = await chromium.launch({
     '--disable-background-timer-throttling',
     '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding'
-  ],
-  executablePath: process.env.NODE_ENV === 'production' ? '/usr/bin/chromium-browser' : undefined
+  ]
+  // Remove the executablePath line - let Playwright find Chromium automatically
 });
 
     globalPage = await globalBrowser.newPage();
