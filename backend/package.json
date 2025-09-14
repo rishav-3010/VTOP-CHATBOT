@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "postinstall": "npx playwright install --with-deps",
+    "postinstall": "npx playwright install --with-deps chromium",
+    "build": "npm install",
     "build-frontend": "npm run build --prefix frontend",
     "install-all": "npm install && npm install --prefix frontend"
   },

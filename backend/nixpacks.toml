@@ -1,39 +1,33 @@
-[build]
-builder = "NIXPACKS"
-
-[deploy]
-startCommand = "node server.js"
-restartPolicyType = "ON_FAILURE"
-
-[build.nixpacksPlan.phases.setup]
+[phases.setup]
 nixPkgs = [
-  "nodejs_18",
-  "glib",
-  "nspr",
-  "nss",
-  "dbus",
-  "expat",
-  "at-spi2-core",
-  "gtk3",
-  "atk",
-  "at-spi2-atk",
-  "cairo",
-  "pango",
-  "libxkbcommon",
-  "libX11",
-  "libXcomposite",
-  "libXdamage",
-  "libXext",
-  "libXfixes",
-  "libXrandr",
-  "libxcb",
-  "alsaLib",
-  "mesa",
-  "gbm"
+  'nodejs-18_x',
+  'python3',
+  'glib',
+  'nss',
+  'nspr',
+  'atk',
+  'at-spi2-atk',
+  'cairo',
+  'cups',
+  'dbus',
+  'gdk-pixbuf',
+  'gtk3',
+  'libdrm',
+  'xorg.libX11',
+  'xorg.libXcomposite',
+  'xorg.libXdamage',
+  'xorg.libXext',
+  'xorg.libXfixes',
+  'xorg.libXrandr',
+  'xorg.libxcb',
+  'xorg.libxkbcommon',
+  'mesa',
+  'pango',
+  'alsa-lib'
 ]
 
-[build.nixpacksPlan.phases.install]
-cmds = ["npm ci"]
-
-[build.nixpacksPlan.start]
-cmd = "node server.js"
+[phases.build]
+cmds = [
+  'npm ci',
+  'npx playwright install --with-deps chromium'
+]
