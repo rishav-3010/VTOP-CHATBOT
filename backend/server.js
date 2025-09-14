@@ -377,6 +377,8 @@ async function loginToVTOP() {
       await globalBrowser.close();
     }
 
+// Replace your browser launch code in loginToVTOP() function with this:
+
 globalBrowser = await chromium.launch({ 
   headless: true,
   args: [
@@ -390,7 +392,7 @@ globalBrowser = await chromium.launch({
     '--no-zygote',
     '--single-process'
   ]
-  // No executablePath specified - let Playwright find it automatically
+  // No executablePath - let Playwright find the browser automatically
 });
 
     globalPage = await globalBrowser.newPage();

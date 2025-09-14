@@ -1,0 +1,33 @@
+[phases.setup]
+nixPkgs = [
+  'nodejs-18_x',
+  'python3',
+  'glib',
+  'nss',
+  'nspr',
+  'atk',
+  'at-spi2-atk',
+  'cairo',
+  'cups',
+  'dbus',
+  'gdk-pixbuf',
+  'gtk3',
+  'libdrm',
+  'xorg.libX11',
+  'xorg.libXcomposite',
+  'xorg.libXdamage',
+  'xorg.libXext',
+  'xorg.libXfixes',
+  'xorg.libXrandr',
+  'xorg.libxcb',
+  'xorg.libxkbcommon',
+  'mesa',
+  'pango',
+  'alsa-lib'
+]
+
+[phases.install]
+cmds = ['npm ci']
+
+[phases.build]
+cmds = ['npx playwright install --with-deps chromium']
