@@ -377,7 +377,8 @@ async function loginToVTOP() {
       await globalBrowser.close();
     }
 
-    globalBrowser = await chromium.launch({ 
+// Replace the browser launch configuration in your loginToVTOP function
+globalBrowser = await chromium.launch({ 
   headless: true,
   args: [
     '--no-sandbox',
@@ -388,8 +389,23 @@ async function loginToVTOP() {
     '--disable-features=VizDisplayCompositor',
     '--no-first-run',
     '--no-zygote',
-    '--single-process'
-  ]
+    '--single-process',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-extensions',
+    '--disable-plugins',
+    '--disable-images',
+    '--disable-javascript',
+    '--disable-default-apps',
+    '--disable-sync',
+    '--disable-translate',
+    '--hide-scrollbars',
+    '--mute-audio',
+    '--no-default-browser-check',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding'
+  ],
+  executablePath: process.env.NODE_ENV === 'production' ? '/usr/bin/chromium-browser' : undefined
 });
 
     globalPage = await globalBrowser.newPage();
