@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build": "npm install",
+    "build": "npm install && npx playwright install chromium",
     "build-frontend": "npm run build --prefix frontend",
     "install-all": "npm install && npm install --prefix frontend"
   },

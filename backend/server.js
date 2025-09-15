@@ -425,8 +425,8 @@ globalBrowser = await chromium.launch({
     '--no-zygote',
     '--single-process'
   ]
-  // No executablePath - let Playwright find it
 });
+
 
 
     globalPage = await globalBrowser.newPage();
@@ -649,11 +649,13 @@ async function startServer() {
     process.exit(1);
   }
   
-  app.listen(PORT, () => {
+  // Fix: Bind to 0.0.0.0 for Railway
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 VTOP Chat Backend running on port ${PORT}`);
     console.log(`📱 Frontend available at http://localhost:${PORT}`);
   });
 }
+
 
 // Replace your current app.listen() call with:
 startServer();
