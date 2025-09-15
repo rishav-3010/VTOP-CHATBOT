@@ -425,8 +425,9 @@ globalBrowser = await chromium.launch({
     '--no-zygote',
     '--single-process'
   ]
-  // No executablePath - let Playwright find the browser automatically
+  // No executablePath - let Playwright find it
 });
+
 
     globalPage = await globalBrowser.newPage();
     globalPage.setDefaultTimeout(240000);
