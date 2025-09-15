@@ -227,26 +227,13 @@
                 setInputValue(query);
             };
 
-            const formatMessage = (message) => {
-                if (message.data && typeof message.data === 'object') {
-                    return React.createElement('div', {}, [
-                        React.createElement('p', { className: "mb-3", key: 'content' }, message.content),
-                        React.createElement('div', { 
-                            className: "bg-gray-50 rounded-lg p-3 text-sm max-h-60 overflow-y-auto", 
-                            key: 'data' 
-                        }, [
-                            React.createElement('pre', { 
-                                className: "whitespace-pre-wrap font-mono text-xs",
-                                key: 'pre'
-                            }, JSON.stringify(message.data, null, 2))
-                        ])
-                    ]);
-                }
-                return React.createElement('div', { 
-  className: "whitespace-pre-wrap font-sans text-sm leading-relaxed",
-  style: { fontFamily: 'inherit' }
-}, message.content);
-            };
+const formatMessage = (message) => {
+    return React.createElement('div', { 
+        className: "whitespace-pre-wrap font-sans text-sm leading-relaxed",
+        style: { fontFamily: 'inherit' }
+    }, message.content);
+};
+
 
             return React.createElement('div', { className: "min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50" }, [
                 // Header
