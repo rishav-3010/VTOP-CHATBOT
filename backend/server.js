@@ -412,20 +412,11 @@ async function loginToVTOP() {
 
 // Replace your browser launch code in loginToVTOP() function with this:
 
-globalBrowser = await chromium.launch({ 
+const browser = await chromium.launch({
   headless: true,
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--disable-web-security',
-    '--disable-features=VizDisplayCompositor',
-    '--no-first-run',
-    '--no-zygote',
-    '--single-process'
-  ]
+  args: ['--no-sandbox', '--disable-setuid-sandbox']
 });
+
 
 
 
