@@ -5,42 +5,9 @@ const path = require('path');
 const { chromium } = require('playwright');
 const { solveUsingViboot } = require('./captcha/captchaSolver');
 const fs = require('fs');
-// Add this at the top of your server.js, after the imports
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
-
-// Function to ensure browsers are installed at runtime
-async function ensureBrowsersInstalled() {
-  try {
-    console.log('🔍 Checking if Playwright browsers are available...');
-    
-    // Try to launch browser to test if it exists
-    const testBrowser = await chromium.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    await testBrowser.close();
-    console.log('✅ Playwright browsers are ready');
-    return true;
-    
-  } catch (error) {
-    console.log('⚠️ Browsers not found, installing at runtime...');
-    
-    try {
-      // Install browsers at runtime
-      await execPromise('npx playwright install chromium');
-      console.log('✅ Runtime browser installation completed');
-      return true;
-    } catch (installError) {
-      console.error('❌ Failed to install browsers at runtime:', installError.message);
-      return false;
-    }
-  }
-}
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
@@ -410,15 +377,20 @@ async function loginToVTOP() {
       await globalBrowser.close();
     }
 
-// Replace your browser launch code in loginToVTOP() function with this:
-
-const browser = await chromium.launch({
+    globalBrowser = await chromium.launch({ 
   headless: true,
-  args: ['--no-sandbox', '--disable-setuid-sandbox']
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-web-security',
+    '--disable-features=VizDisplayCompositor',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process'
+  ]
 });
-
-
-
 
     globalPage = await globalBrowser.newPage();
     globalPage.setDefaultTimeout(240000);
@@ -630,23 +602,7 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-// Modify your existing app.listen() at the bottom to this:
-async function startServer() {
-  // Install browsers before starting server
-  const browsersReady = await ensureBrowsersInstalled();
-  
-  if (!browsersReady) {
-    console.error('❌ Cannot start server: Playwright browsers not available');
-    process.exit(1);
-  }
-  
-  // Fix: Bind to 0.0.0.0 for Railway
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 VTOP Chat Backend running on port ${PORT}`);
-    console.log(`📱 Frontend available at http://localhost:${PORT}`);
-  });
-}
-
-
-// Replace your current app.listen() call with:
-startServer();
+app.listen(PORT, () => {
+  console.log(`🚀 VTOP Chat Backend running on port ${PORT}`);
+  console.log(`📱 Frontend available at http://localhost:${PORT}`);
+});
