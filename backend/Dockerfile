@@ -5,11 +5,9 @@ WORKDIR /app
 # Copy package files first (for Docker layer caching)
 COPY package*.json ./
 
-# Install dependencies
+# Skip browser download during npm install, use pre-installed ones
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm ci
-
-# Install Playwright browsers explicitly
-RUN npx playwright install chromium
 
 # Copy application code
 COPY . .
