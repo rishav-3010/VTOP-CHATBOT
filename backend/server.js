@@ -18,9 +18,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 let globalBrowser = null;
 let globalPage = null;
 let isLoggedIn = false;
+let currentCredentials = {
+  username: null,
+  password: null,
+  isDemo: false
+};
 
-const username = process.env.VTOP_USERNAME;
-const password = process.env.VTOP_PASSWORD;
+// Sample credentials from .env for demo purposes
+const demoUsername = process.env.VTOP_USERNAME;
+const demoPassword = process.env.VTOP_PASSWORD;
 
 // Intent recognition using AI
 async function recognizeIntent(message) {
@@ -29,26 +35,37 @@ async function recognizeIntent(message) {
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   
   const prompt = `
-    You are an intent classifier for a VTOP (university portal) assistant.
+    You are an advanced intent classifier for a VTOP (VIT University portal) assistant.
+    Analyze the user's message and determine their primary intent.
     
     Available functions:
-    - getCGPA: Get student's CGPA
-    - getAttendance: Get attendance details
-    - getMarks: Get marks/grades information
-    - getAssignments: Get digital assignments
-    - getTimetable: Get class schedule/timetable
-    - general: General conversation or help
+    - getCGPA: CGPA queries, GPA questions, overall academic performance
+    - getAttendance: Attendance percentage, classes attended, debar status, attendance records
+    - getMarks: Marks, grades, scores, test results, exam performance, CAT marks, FAT marks
+    - getAssignments: Digital assignments, DA deadlines, assignment uploads, submission dates
+    - getTimetable: Class schedule, timetable, class timings (not implemented yet)
+    - general: Greetings, help requests, general conversation, unclear requests
+    
+    Intent Detection Rules:
+    - Look for keywords: CGPA, GPA, grade point → getCGPA
+    - Look for keywords: attendance, classes, present, absent, debar → getAttendance  
+    - Look for keywords: marks, grades, scores, CAT, FAT, exam, test → getMarks
+    - Look for keywords: assignment, DA, deadline, upload, submission → getAssignments
+    - Look for keywords: timetable, schedule, timing, classes today → getTimetable
+    - Casual conversation, greetings, help → general
     
     User message: "${message}"
     
-    Respond with ONLY the function name from the list above. No explanation needed.
     Examples:
-    - "What's my CGPA?" -> getCGPA
-    - "Show attendance" -> getAttendance  
-    - "My marks please" -> getMarks
-    - "My da upload deadlines" -> getAssignments
-    - "What's my schedule?" -> getTimetable
-    - "Hello" -> general
+    - "What's my current CGPA?" → getCGPA
+    - "How's my attendance looking?" → getAttendance  
+    - "Show me my CAT 1 marks" → getMarks
+    - "Any pending DA submissions?" → getAssignments
+    - "What are my class timings?" → getTimetable
+    - "Hello, how are you?" → general
+    - "Help me with VTOP" → general
+    
+    Respond with ONLY the function name. No explanations or additional text.
   `;
 
   try {
@@ -69,6 +86,10 @@ async function generateResponse(intent, data, originalMessage) {
   
   let prompt = '';
   
+  // Add demo mode context to responses
+  const demoContext = currentCredentials.isDemo ? 
+    "\n\nNote: You are currently viewing demo data from a real VIT student account. This showcases actual VTOP functionality and data structure." : "";
+  
   switch (intent) {
     case 'getcgpa':
       prompt = `
@@ -76,7 +97,7 @@ async function generateResponse(intent, data, originalMessage) {
         Their CGPA is: ${data}
         
         Generate a friendly, encouraging response about their CGPA. Keep it conversational and positive.
-        Include the CGPA value and maybe a motivational comment.
+        Include the CGPA value and maybe a motivational comment.${demoContext}
       `;
       break;
       
@@ -92,7 +113,7 @@ async function generateResponse(intent, data, originalMessage) {
       📊 Percentage: [xx%]
       🚫 Debar Status: [status]
 
-      Only output in this structured multi-line format, no extra explanation.
+      Only output in this structured multi-line format, no extra explanation.${demoContext}
       `;
       break;
       
@@ -104,7 +125,7 @@ async function generateResponse(intent, data, originalMessage) {
         Format the output like this style,no need for unnecessary explantions,whatever user asked just respond accordingly.keep it short:
 
 📚 [Course Code] - [Course Name]
-   📝 [Assessment Name] - [Score]/[Max] (Weightage: xx%) → xx%
+   📝 [Assessment Name] - [Score]/[Max] (Weightage: xx%) → xx%${demoContext}
       `;
       break;
 
@@ -113,7 +134,7 @@ async function generateResponse(intent, data, originalMessage) {
         The user asked: "${originalMessage}"
         Here's their assignments data: ${JSON.stringify(data, null, 2)}
         
-        
+        ${demoContext}
       `;
       break;
       
@@ -176,9 +197,8 @@ async function getCGPAAjax(page) {
   let cgpaMatch = response.match(/<span.*?>([0-9.]+)<\/span>/g);
   let cgpa = cgpaMatch ? cgpaMatch[2]?.match(/>([0-9.]+)</)?.[1] : null;
   
-    
-      console.log('🌟 Your CGPA is:', cgpa);
-      return cgpa;
+  console.log('🌟 Your CGPA is:', cgpa);
+  return cgpa;
 }
 
 async function getAttendanceAjax(page, semesterSubId = 'VL20252601') {
@@ -371,26 +391,26 @@ async function solveCaptcha(page) {
 }
 
 // VTOP Login Function
-async function loginToVTOP() {
+async function loginToVTOP(username, password) {
   try {
     if (globalBrowser) {
       await globalBrowser.close();
     }
 
     globalBrowser = await chromium.launch({ 
-  headless: true,
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--disable-web-security',
-    '--disable-features=VizDisplayCompositor',
-    '--no-first-run',
-    '--no-zygote',
-    '--single-process'
-  ]
-});
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process'
+      ]
+    });
 
     globalPage = await globalBrowser.newPage();
     globalPage.setDefaultTimeout(240000);
@@ -496,8 +516,44 @@ async function loginToVTOP() {
 // API Routes
 app.post('/api/login', async (req, res) => {
   try {
-    const success = await loginToVTOP();
-    res.json({ success });
+    const { username, password, useDemo } = req.body;
+    
+    let loginUsername, loginPassword;
+    
+    if (useDemo) {
+      // Use demo credentials
+      loginUsername = demoUsername;
+      loginPassword = demoPassword;
+      currentCredentials = {
+        username: loginUsername,
+        password: loginPassword,
+        isDemo: true
+      };
+    } else {
+      // Use provided credentials
+      if (!username || !password) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Username and password are required when not using demo mode' 
+        });
+      }
+      loginUsername = username;
+      loginPassword = password;
+      currentCredentials = {
+        username: loginUsername,
+        password: loginPassword,
+        isDemo: false
+      };
+    }
+
+    const success = await loginToVTOP(loginUsername, loginPassword);
+    res.json({ 
+      success, 
+      isDemo: currentCredentials.isDemo,
+      message: success ? 
+        (currentCredentials.isDemo ? 'Successfully logged in with demo account' : 'Successfully logged in with your credentials') :
+        'Login failed'
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -580,6 +636,36 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// Get current session info
+app.get('/api/session', (req, res) => {
+  res.json({
+    isLoggedIn,
+    isDemo: currentCredentials.isDemo,
+    hasCredentials: !!currentCredentials.username
+  });
+});
+
+// Logout endpoint
+app.post('/api/logout', async (req, res) => {
+  try {
+    if (globalBrowser) {
+      await globalBrowser.close();
+      globalBrowser = null;
+      globalPage = null;
+    }
+    isLoggedIn = false;
+    currentCredentials = {
+      username: null,
+      password: null,
+      isDemo: false
+    };
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -605,4 +691,5 @@ process.on('SIGTERM', async () => {
 app.listen(PORT, () => {
   console.log(`🚀 VTOP Chat Backend running on port ${PORT}`);
   console.log(`📱 Frontend available at http://localhost:${PORT}`);
+  console.log(`🎭 Demo mode available: ${demoUsername ? 'Yes' : 'No'}`);
 });
