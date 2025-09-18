@@ -1,4 +1,4 @@
 node_modules/
 .env
-.test-login-simple.js
+test-login-simple.js
 mock

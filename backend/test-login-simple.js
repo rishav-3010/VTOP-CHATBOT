@@ -415,8 +415,8 @@ async function testVtopLogin() {
 
 
           await scrapeDAUpload(page);
-          await scrapeAttendance(page);
-          await scrapeTimeTable(page);
+          // await scrapeAttendance(page);
+          // await scrapeTimeTable(page);
          
 
 

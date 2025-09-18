@@ -87,8 +87,7 @@ async function generateResponse(intent, data, originalMessage) {
   let prompt = '';
   
   // Add demo mode context to responses
-  const demoContext = currentCredentials.isDemo ? 
-    "\n\nNote: You are currently viewing demo data from a real VIT student account. This showcases actual VTOP functionality and data structure." : "";
+  
   
   switch (intent) {
     case 'getcgpa':
@@ -97,7 +96,8 @@ async function generateResponse(intent, data, originalMessage) {
         Their CGPA is: ${data}
         
         Generate a friendly, encouraging response about their CGPA. Keep it conversational and positive.
-        Include the CGPA value and maybe a motivational comment.${demoContext}
+        Include the CGPA value and maybe a motivational comment.
+        
       `;
       break;
       
@@ -113,30 +113,74 @@ async function generateResponse(intent, data, originalMessage) {
       📊 Percentage: [xx%]
       🚫 Debar Status: [status]
 
-      Only output in this structured multi-line format, no extra explanation.${demoContext}
+      Only output in this structured multi-line format, no extra explanation.
       `;
       break;
       
     case 'getmarks':
-      prompt = `
-        The user asked: "${originalMessage}"
-        Here's their marks data: ${JSON.stringify(data, null, 2)}
-        
-        Format the output like this style,no need for unnecessary explantions,whatever user asked just respond accordingly.keep it short:
+  prompt = `
+    The user asked: "${originalMessage}"
+    Here's their marks data: ${JSON.stringify(data, null, 2)}
+    
+    Format the output like this:
+    
+    📚 [1] BCSE310L - IoT Architectures and Protocols
+       📝 CAT-1:  25/50  | Weight: 7.5/15
+       📝 Quiz-1: 10/10  | Weight: 10/10 
+    
+    📚 [2] BCSE312L - Programming for IoT Boards
+       📝 Assessment-1: 10/20   | Weight: 5/10
+    
+    FIELD MAPPING:
+    - Use course.slNo for numbering [1], [2], etc.
+    - Use course.courseCode - course.courseTitle for subject line
+    - Use course.marks[].title for assessment name
+    - Format: course.marks[].scored/course.marks[].max  | Weight: course.marks[].weightage/course.marks[].percent
+    
+    RULES:
+    1. Start each course with "📚 [slNo] courseCode - courseTitle"
+    2. Each assessment: "   📝 title: scored/max  | Weight: weightage/percent%"
+    3. Use exactly 3 spaces before each assessment line
+    4. Add blank line between courses
+    5. If no marks, show "   📊 No marks available"
+    6. Keep it concise - no extra text
+  `;
+  break;
 
-📚 [Course Code] - [Course Name]
-   📝 [Assessment Name] - [Score]/[Max] (Weightage: xx%) → xx%${demoContext}
-      `;
-      break;
 
     case 'getassignments':
-      prompt = `
-        The user asked: "${originalMessage}"
-        Here's their assignments data: ${JSON.stringify(data, null, 2)}
-        
-        ${demoContext}
-      `;
-      break;
+  prompt = `
+    The user asked: "${originalMessage}"
+    Here's their assignments data: ${JSON.stringify(data, null, 2)}
+    
+    Format the output EXACTLY like this structure:
+    
+    📋 DIGITAL ASSIGNMENTS - ALL SUBJECTS
+    ============================================================
+    📚 [1] BCSE310L - IoT Architectures and Protocols
+       📝 [1] Course Project - Due: 25-Sep-2025
+    
+    📚 [2] BCSE312L - Programming for IoT Boards
+       📝 [1] Course Based Design Project - Due: 07-Nov-2025
+    
+    FIELD MAPPING FROM JSON DATA:
+    - For subject line: "📚 [subject.slNo] subject.courseCode - subject.courseTitle"
+    - For assignment line: "   📝 [assignment.slNo] assignment.title - Due: assignment.dueDate"
+    
+    FORMATTING RULES:
+    1. Start with "📋 DIGITAL ASSIGNMENTS - ALL SUBJECTS(If user asked for one or two subjects then write this accordingly)"
+    2. Add a line of 60 equals signs (=)(if more than one subject then only do this)
+    3. For each subject in subjects array: "📚 [slNo] courseCode - courseTitle"
+    4. For each assignment in subject.assignments: "   📝 [slNo] title - Due: dueDate"
+    5. Use exactly 3 spaces before each assignment line
+    6. Add blank line between subjects
+    7. If subject.assignments is empty, show "   ⏳ No assignments found"
+    8. If assignment.dueDate is empty or "-", just show "Due: -"
+    
+    Use the EXACT field names from the JSON data. Follow this format precisely.
+  `;
+  break;
+
       
     case 'gettimetable':
       prompt = `
