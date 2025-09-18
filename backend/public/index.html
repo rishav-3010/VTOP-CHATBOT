@@ -228,7 +228,23 @@
                                             disabled: isLoading
                                         }, showPassword ? React.createElement(EyeOff) : React.createElement(Eye))
                                     ])
+                                ]),
+                                // ADD THIS PRIVACY NOTICE HERE
+                            React.createElement('div', { 
+                                className: "bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 mt-3",
+                                key: 'privacy-notice' 
+                            }, [
+                                React.createElement('div', { className: "flex items-start space-x-2" }, [
+                                    React.createElement('div', {}, [
+                                        React.createElement('p', { className: "font-medium mb-1" }, "🔒 Your Privacy is Protected"),
+                                        React.createElement('p', {}, "• Credentials used only for this session to connect to VTOP"),
+                                        React.createElement('p', {}, "• No passwords stored, saved, or logged anywhere"),
+                                        React.createElement('p', {}, "• All data cleared when you logout"),
+                                        React.createElement('p', {}, "• Your academic information is never stored or shared"),
+                                        React.createElement('p', {}, "• You can save credentials in your browser's password manager for convenience")
+                                    ])
                                 ])
+                            ])
                             ] : [
                                 React.createElement('div', { 
                                     className: "bg-green-50 border border-green-200 rounded-lg p-4", 
