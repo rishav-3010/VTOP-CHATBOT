@@ -34,39 +34,42 @@ async function recognizeIntent(message) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   
-  const prompt = `
-    You are an advanced intent classifier for a VTOP (VIT University portal) assistant.
-    Analyze the user's message and determine their primary intent.
-    
-    Available functions:
-    - getCGPA: CGPA queries, GPA questions, overall academic performance
-    - getAttendance: Attendance percentage, classes attended, debar status, attendance records
-    - getMarks: Marks, grades, scores, test results, exam performance, CAT marks, FAT marks
-    - getAssignments: Digital assignments, DA deadlines, assignment uploads, submission dates
-    - getTimetable: Class schedule, timetable, class timings (not implemented yet)
-    - general: Greetings, help requests, general conversation, unclear requests
-    
-    Intent Detection Rules:
-    - Look for keywords: CGPA, GPA, grade point → getCGPA
-    - Look for keywords: attendance, classes, present, absent, debar → getAttendance  
-    - Look for keywords: marks, grades, scores, CAT, FAT, exam, test → getMarks
-    - Look for keywords: assignment, DA, deadline, upload, submission → getAssignments
-    - Look for keywords: timetable, schedule, timing, classes today → getTimetable
-    - Casual conversation, greetings, help → general
-    
-    User message: "${message}"
-    
-    Examples:
-    - "What's my current CGPA?" → getCGPA
-    - "How's my attendance looking?" → getAttendance  
-    - "Show me my CAT 1 marks" → getMarks
-    - "Any pending DA submissions?" → getAssignments
-    - "What are my class timings?" → getTimetable
-    - "Hello, how are you?" → general
-    - "Help me with VTOP" → general
-    
-    Respond with ONLY the function name. No explanations or additional text.
-  `;
+const prompt = `
+  You are an advanced intent classifier for a VTOP (VIT University portal) assistant.
+  Analyze the user's message and determine their primary intent.
+  
+  Available functions:
+  - getCGPA: CGPA queries, GPA questions, overall academic performance
+  - getAttendance: Attendance percentage, classes attended, debar status, attendance records
+  - getMarks: Marks, grades, scores, test results, exam performance, CAT marks, FAT marks
+  - getAssignments: Digital assignments, DA deadlines, assignment uploads, submission dates
+  - getLoginHistory: Login history, session history, login records, access logs
+  - getTimetable: Class schedule, timetable, class timings (not implemented yet)
+  - general: Greetings, help requests, general conversation, unclear requests
+  
+  Intent Detection Rules:
+  - Look for keywords: CGPA, GPA, grade point → getCGPA
+  - Look for keywords: attendance, classes, present, absent, debar → getAttendance  
+  - Look for keywords: marks, grades, scores, CAT, FAT, exam, test → getMarks
+  - Look for keywords: assignment, DA, deadline, upload, submission → getAssignments
+  - Look for keywords: login history, session, access log, login records → getLoginHistory
+  - Look for keywords: timetable, schedule, timing, classes today → getTimetable
+  - Casual conversation, greetings, help → general
+  
+  User message: "${message}"
+  
+  Examples:
+  - "What's my current CGPA?" → getCGPA
+  - "How's my attendance looking?" → getAttendance  
+  - "Show me my CAT 1 marks" → getMarks
+  - "Any pending DA submissions?" → getAssignments
+  - "Show my login history" → getLoginHistory
+  - "What are my class timings?" → getTimetable
+  - "Hello, how are you?" → general
+  - "Help me with VTOP" → general
+  
+  Respond with ONLY the function name. No explanations or additional text.
+`;
 
   try {
     const result = await model.generateContent(prompt);
@@ -181,6 +184,23 @@ async function generateResponse(intent, data, originalMessage) {
   `;
   break;
 
+  case 'getloginhistory':
+  prompt = `
+    The user asked: "${originalMessage}"
+    Here's their login history data: ${data}
+    
+    Format the output like this:
+    
+    🕐 LOGIN HISTORY
+    ============================================================
+    
+    [Display the login history data in a clean, readable format]
+    
+    Keep it simple,tabular and organized.
+  `;
+  break;
+
+
       
     case 'gettimetable':
       prompt = `
@@ -193,16 +213,16 @@ async function generateResponse(intent, data, originalMessage) {
       break;
       
     default:
-      prompt = `
-      So u r a vtop chatbot.
-      righnow u help functionalities to get help with
-      view cgpa,view marks,check da deadlines,check atendance
+  prompt = `
+  So u r a vtop chatbot.
+  right now u help functionalities to get help with
+  view cgpa, view marks, check da deadlines, check attendance, view login history
 
-      this is user's msg  "${originalMessage}"
-    
-      answer it accordingly
-        
-      `;
+  this is user's msg  "${originalMessage}"
+
+  answer it accordingly
+  `;
+
   }
 
   try {
@@ -243,6 +263,28 @@ async function getCGPAAjax(page) {
   
   console.log('🌟 Your CGPA is:', cgpa);
   return cgpa;
+}
+
+async function getLoginHistoryAjax(page) {
+  const { csrfToken, authorizedID } = await getAuthData(page);
+  
+  const response = await page.evaluate(async (payloadString) => {
+    const res = await fetch('/vtop/show/login/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payloadString
+    });
+    return await res.text();
+  }, `_csrf=${csrfToken}&authorizedID=${authorizedID}&x=${new Date().toUTCString()}`);
+
+  // Extract just the text content without HTML tags
+  const textContent = await page.evaluate((html) => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    return tempDiv.textContent || tempDiv.innerText || '';
+  }, response);
+
+  return textContent;
 }
 
 async function getAttendanceAjax(page, semesterSubId = 'VL20252601') {
@@ -659,6 +701,15 @@ app.post('/api/chat', async (req, res) => {
           response = "Sorry, I couldn't fetch your assignments right now. Please try again.";
         }
         break;
+
+        case 'getloginhistory':
+  try {
+    data = await getLoginHistoryAjax(globalPage);
+    response = await generateResponse(intent, data, message);
+  } catch (error) {
+    response = "Sorry, I couldn't fetch your login history right now. Please try again.";
+  }
+  break;
 
       case 'gettimetable':
         response = await generateResponse(intent, null, message);
