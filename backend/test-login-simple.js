@@ -3,7 +3,7 @@ require('dotenv').config();
 const { chromium } = require('playwright');
 const { solveUsingViboot } = require('./captcha/captchaSolver');
 const path = require('path');
-const fs = require('fs');
+
 
 const username = process.env.VTOP_USERNAME;
 const password = process.env.VTOP_PASSWORD;
