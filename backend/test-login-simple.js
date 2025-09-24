@@ -1,14 +1,17 @@
-//test-login-simple.js
+//test-login-simple4.js
 require('dotenv').config();
 const { chromium } = require('playwright');
 const { solveUsingViboot } = require('./captcha/captchaSolver');
 const path = require('path');
-
+const fs = require('fs');
 
 const username = process.env.VTOP_USERNAME;
 const password = process.env.VTOP_PASSWORD;
 
-// ===== HELPER FUNCTIONS =====
+
+
+
+// Get CSRF token and student ID (reusable helper)
 async function getAuthData(page) {
   return await page.evaluate(() => {
     const csrfToken = document.querySelector('meta[name="_csrf"]')?.getAttribute('content') ||
@@ -20,26 +23,8 @@ async function getAuthData(page) {
   });
 }
 
-// ===== SCRAPING FUNCTIONS =====
-async function getCGPAAjax(page) {
-  const { csrfToken, authorizedID } = await getAuthData(page);
-  
-  const response = await page.evaluate(async (payloadString) => {
-    const res = await fetch('/vtop/get/dashboard/current/cgpa/credits', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: payloadString
-    });
-    return await res.text();
-  }, `authorizedID=${authorizedID}&_csrf=${csrfToken}&x=${new Date().toUTCString()}`);
-
-  let cgpaMatch = response.match(/<span.*?>([0-9.]+)<\/span>/g);
-  let cgpa = cgpaMatch ? cgpaMatch[2]?.match(/>([0-9.]+)</)?.[1] : null;
-  
-  console.log('🌟 Your CGPA is:', cgpa);
-  return cgpa;
-}
-
+// Login History Function
+// Login History Function
 async function getLoginHistoryAjax(page) {
   const { csrfToken, authorizedID } = await getAuthData(page);
   
@@ -59,9 +44,32 @@ async function getLoginHistoryAjax(page) {
     return tempDiv.textContent || tempDiv.innerText || '';
   }, response);
 
+  console.log('\n🕐 LOGIN HISTORY\n' + '='.repeat(40));
+  console.log(textContent);
+
   return textContent;
 }
+// CGPA Function
+async function getCGPAAjax(page) {
+  const { csrfToken, authorizedID } = await getAuthData(page);
+  
+  const response = await page.evaluate(async (payloadString) => {
+    const res = await fetch('/vtop/get/dashboard/current/cgpa/credits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payloadString
+    });
+    return await res.text();
+  }, `authorizedID=${authorizedID}&_csrf=${csrfToken}&x=${new Date().toUTCString()}`);
 
+  const cgpaMatch = response.match(/<span.*?>([0-9.]+)<\/span>/g);
+  const cgpa = cgpaMatch ? cgpaMatch[2]?.match(/>([0-9.]+)</)?.[1] : null;
+  
+  console.log('🌟 Your CGPA is:', cgpa);
+  return cgpa;
+}
+
+// Attendance Function
 async function getAttendanceAjax(page, semesterSubId = 'VL20252601') {
   const { csrfToken, authorizedID } = await getAuthData(page);
   
@@ -99,341 +107,16 @@ async function getAttendanceAjax(page, semesterSubId = 'VL20252601') {
     }).filter(item => item.slNo);
   }, response);
 
-  // Print attendance data nicely
   console.log('\n📊 ATTENDANCE SUMMARY:');
-  console.log('='.repeat(80));
- 
-  attendanceData.forEach(({ slNo, courseDetail, attendedClasses, totalClasses, attendancePercentage, debarStatus }) => {
-    console.log(`\n[${slNo}] ${courseDetail}`);
-    console.log(`    Attended: ${attendedClasses}/${totalClasses} classes`);
-    console.log(`    Percentage: ${attendancePercentage}`);
-    console.log(`    Debar Status: ${debarStatus}`);
+  attendanceData.forEach(({ slNo, courseDetail, attendedClasses, totalClasses, attendancePercentage }) => {
+    console.log(`[${slNo}] ${courseDetail}: ${attendedClasses}/${totalClasses} (${attendancePercentage})`);
   });
-
-  console.log('\n' + '='.repeat(80));
 
   return attendanceData;
 }
-async function getTimetableAjax(page, semesterSubId = 'VL20252601') {
-  const { csrfToken, authorizedID } = await getAuthData(page);
-  
-  // First, get course registration data to build course name mapping
-  let courseMapping = {};
-  try {
-    const registrationResponse = await page.evaluate(async (payloadString) => {
-      const res = await fetch('/vtop/academics/common/CourseRegistration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: payloadString
-      });
-      return await res.text();
-    }, `verifyMenu=true&authorizedID=${authorizedID}&_csrf=${csrfToken}&semesterSubId=${semesterSubId}`);
 
-    // Extract course names from registration page
-    courseMapping = await page.evaluate((html) => {
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = html;
-      const courseRows = Array.from(tempDiv.querySelectorAll('tbody tr'));
-      const mapping = {};
-      
-      courseRows.forEach(row => {
-        const cells = row.querySelectorAll('td');
-        if (cells.length > 2) {
-          const courseCell = cells[2]; // Course column
-          const courseText = courseCell.textContent.trim();
-          const match = courseText.match(/^([A-Z0-9]+L?)\s*-\s*(.+)/);
-          if (match) {
-            const [, courseCode, courseName] = match;
-            mapping[courseCode] = courseName.split('(')[0].trim(); // Remove "(Theory Only)" part
-          }
-        }
-      });
-      return mapping;
-    }, registrationResponse);
-    
-    console.log('📚 Course mapping loaded:', Object.keys(courseMapping).length, 'courses found');
-  } catch (error) {
-    console.log('⚠️ Could not load course names, showing codes only');
-  }
-  
-  // First request to access timetable page
-  const verifyResponse = await page.evaluate(async (payloadString) => {
-    const res = await fetch('/vtop/academics/common/StudentTimeTable', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: payloadString
-    });
-    return await res.text();
-  }, `verifyMenu=true&authorizedID=${authorizedID}&_csrf=${csrfToken}`);
-
-  // Second request to get timetable data
-  const response = await page.evaluate(async (payloadString) => {
-    const res = await fetch('/vtop/processViewTimeTable', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: payloadString
-    });
-    return await res.text();
-  }, `_csrf=${csrfToken}&semesterSubId=${semesterSubId}&authorizedID=${authorizedID}`);
-
-  const timetableData = await page.evaluate((html) => {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    
-    // Find the timetable table
-    const table = tempDiv.querySelector('#timeTableStyle tbody');
-    if (!table) return { schedule: [], timeSlots: {} };
-    
-    const rows = Array.from(table.querySelectorAll('tr'));
-    const schedule = {};
-    const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    
-    // Initialize schedule structure
-    days.forEach(day => {
-      schedule[day] = {
-        theory: [],
-        lab: []
-      };
-    });
-    
-    let currentDay = '';
-    let isTheory = true;
-    
-    // Process each row
-    rows.forEach(row => {
-      const cells = row.querySelectorAll('td');
-      
-      // Skip header rows (time slots)
-      if (cells.length > 0 && (
-        cells[0].textContent.includes('THEORY') || 
-        cells[0].textContent.includes('LAB') ||
-        cells[0].textContent.includes('Start') ||
-        cells[0].textContent.includes('End')
-      )) {
-        return;
-      }
-      
-      // Check if this is a day row
-      const firstCell = cells[0];
-      if (firstCell && days.includes(firstCell.textContent.trim())) {
-        currentDay = firstCell.textContent.trim();
-        
-        // Check if this is theory or lab row
-        const secondCell = cells[1];
-        isTheory = secondCell && secondCell.textContent.includes('THEORY');
-        
-        // Process the schedule cells (skip first 2 cells - day and type)
-        const scheduleCells = Array.from(cells).slice(2);
-        const scheduleSlots = [];
-        
-        scheduleCells.forEach((cell, index) => {
-          const content = cell.textContent.trim();
-          
-          // Skip lunch and empty cells
-          if (content === 'Lunch' || content === '-' || content === '') {
-            scheduleSlots.push({ slot: index, content: null, type: 'empty' });
-            return;
-          }
-          
-          // Check if cell has course information (colored cells with course codes)
-          const bgColor = cell.getAttribute('bgcolor') || cell.style.backgroundColor;
-          if (bgColor === '#FC6C85' || content.includes('-')) {
-            // Parse course information like "A1-BCSE406L-TH-SJT508-ALL"
-            const parts = content.split('-');
-            if (parts.length >= 4) {
-              scheduleSlots.push({
-                slot: index,
-                slotCode: parts[0],
-                courseCode: parts[1],
-                courseType: parts[2],
-                venue: parts[3],
-                section: parts[4] || 'ALL',
-                type: 'course'
-              });
-            } else {
-              scheduleSlots.push({
-                slot: index,
-                content: content,
-                type: 'other'
-              });
-            }
-          } else {
-            // Regular slot codes like "B1", "L25", etc.
-            scheduleSlots.push({
-              slot: index,
-              content: content,
-              type: 'slot'
-            });
-          }
-        });
-        
-        if (currentDay && schedule[currentDay]) {
-          if (isTheory) {
-            schedule[currentDay].theory = scheduleSlots;
-          } else {
-            schedule[currentDay].lab = scheduleSlots;
-          }
-        }
-      }
-    });
-    
-    return schedule;
-  }, response);
-
-  // Print timetable data nicely
-  console.log('\n📅 WEEKLY TIMETABLE:');
-  console.log('='.repeat(80));
-  
-  const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-  const timeSlots = [
-    '08:00-08:50', '09:00-09:50', '10:00-10:50', '11:00-11:50', 
-    '12:00-12:50', 'LUNCH', '14:00-14:50', '15:00-15:50', 
-    '16:00-16:50', '17:00-17:50', '18:00-18:50', '18:51-19:00', '19:01-19:50'
-  ];
-  
-  days.forEach(day => {
-    if (timetableData[day]) {
-      console.log(`\n🗓️  ${day}:`);
-      console.log('-'.repeat(40));
-      
-      // Theory classes
-      console.log('  📚 THEORY:');
-      const theoryCourses = timetableData[day].theory.filter(slot => slot.type === 'course');
-      if (theoryCourses.length > 0) {
-        theoryCourses.forEach(course => {
-          const timeSlot = timeSlots[course.slot] || `Slot ${course.slot}`;
-          console.log(`    ${timeSlot}: ${course.courseCode} - ${course.courseName}`);
-          console.log(`      Slot: ${course.slotCode} | Venue: ${course.venue}`);
-        });
-      } else {
-        console.log('    No theory classes');
-      }
-      
-      // Lab classes
-      console.log('  🔬 LAB:');
-      const labCourses = timetableData[day].lab.filter(slot => slot.type === 'course');
-      if (labCourses.length > 0) {
-        labCourses.forEach(course => {
-          const timeSlot = timeSlots[course.slot] || `Slot ${course.slot}`;
-          console.log(`    ${timeSlot}: ${course.courseCode} - ${course.courseName}`);
-          console.log(`      Slot: ${course.slotCode} | Venue: ${course.venue}`);
-        });
-      } else {
-        console.log('    No lab classes');
-      }
-    }
-  });
-
-  console.log('\n' + '='.repeat(80));
-  
-  return timetableData;
-}
-async function getExamScheduleAjax(page, semesterSubId = 'VL20252601') {
-  const { csrfToken, authorizedID } = await getAuthData(page);
-  
-  // First request to access exam schedule page
-  const verifyResponse = await page.evaluate(async (payloadString) => {
-    const res = await fetch('/vtop/examinations/StudExamSchedule', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: payloadString
-    });
-    return await res.text();
-  }, `verifyMenu=true&authorizedID=${authorizedID}&_csrf=${csrfToken}&nocache=${new Date().toUTCString()}`);
-
-  // Second request to get exam schedule data
-  const response = await page.evaluate(async (payloadString) => {
-    const res = await fetch('/vtop/examinations/doSearchExamScheduleForStudent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: payloadString
-    });
-    return await res.text();
-  }, `authorizedID=${authorizedID}&_csrf=${csrfToken}&semesterSubId=${semesterSubId}`);
-
-  const examData = await page.evaluate((html) => {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    const rows = Array.from(tempDiv.querySelectorAll('tbody tr.tableContent'));
-    
-    const examSchedule = {
-      FAT: [],
-      CAT2: [],
-      CAT1: []
-    };
-    
-    let currentExamType = '';
-    
-    rows.forEach(row => {
-      const cells = row.querySelectorAll('td');
-      
-      // Check if this is an exam type header row
-      if (cells.length === 1 && cells[0].classList.contains('panelHead-secondary')) {
-        currentExamType = cells[0].innerText.trim();
-        return;
-      }
-      
-      // Skip if not enough cells or if it's a header row
-      if (cells.length < 13 || !currentExamType) return;
-      
-      const examInfo = {
-        slNo: cells[0]?.innerText.trim() || '',
-        courseCode: cells[1]?.innerText.trim() || '',
-        courseTitle: cells[2]?.innerText.trim() || '',
-        courseType: cells[3]?.innerText.trim() || '',
-        classId: cells[4]?.innerText.trim() || '',
-        slot: cells[5]?.innerText.trim() || '',
-        examDate: cells[6]?.innerText.trim() || '',
-        examSession: cells[7]?.innerText.trim() || '',
-        reportingTime: cells[8]?.innerText.trim() || '',
-        examTime: cells[9]?.innerText.trim() || '',
-        venue: cells[10]?.querySelector('span')?.innerText.trim() || cells[10]?.innerText.trim() || '-',
-        seatLocation: cells[11]?.querySelector('span')?.innerText.trim() || cells[11]?.innerText.trim() || '-',
-        seatNo: cells[12]?.querySelector('span')?.innerText.trim() || cells[12]?.innerText.trim() || '-'
-      };
-      
-      // Only add if we have valid data
-      if (examInfo.slNo && examInfo.courseCode) {
-        if (currentExamType === 'FAT') {
-          examSchedule.FAT.push(examInfo);
-        } else if (currentExamType === 'CAT2') {
-          examSchedule.CAT2.push(examInfo);
-        } else if (currentExamType === 'CAT1') {
-          examSchedule.CAT1.push(examInfo);
-        }
-      }
-    });
-    
-    return examSchedule;
-  }, response);
-
-  // Print exam schedule data nicely
-  console.log('\n📅 EXAM SCHEDULE:');
-  console.log('='.repeat(80));
-  
-  ['FAT', 'CAT2', 'CAT1'].forEach(examType => {
-    if (examData[examType] && examData[examType].length > 0) {
-      console.log(`\n🎯 ${examType} EXAMS:`);
-      console.log('-'.repeat(50));
-      
-      examData[examType].forEach(exam => {
-        console.log(`\n[${exam.slNo}] ${exam.courseCode} - ${exam.courseTitle}`);
-        console.log(`    📅 Date: ${exam.examDate} | Session: ${exam.examSession}`);
-        console.log(`    ⏰ Time: ${exam.examTime} | Reporting: ${exam.reportingTime}`);
-        console.log(`    🏢 Venue: ${exam.venue} | Seat: ${exam.seatLocation}-${exam.seatNo}`);
-        console.log(`    📚 Slot: ${exam.slot} | Type: ${exam.courseType}`);
-      });
-    } else {
-      console.log(`\n🎯 ${examType} EXAMS: No exams scheduled`);
-    }
-  });
-
-  console.log('\n' + '='.repeat(80));
-  
-  return examData;
-}
-
-async function getMarkViewAjax(page, semesterSubId = 'VL20252601') {
+// Mark View Function //VL20242505
+async function getMarkViewAjax(page, semesterSubId = 'VL20242505') {
   const { csrfToken, authorizedID } = await getAuthData(page);
   
   const response = await page.evaluate(async (payloadString) => {
@@ -478,37 +161,39 @@ async function getMarkViewAjax(page, semesterSubId = 'VL20252601') {
             percent: outputs[3]?.innerText.trim()
           };
         });
-        i++;
+        i++; // Skip marks table row
       }
       courses.push(course);
     }
     return courses;
   }, response);
 
-  // Print marks data nicely
-  console.log('\n📊 MARKS SUMMARY:');
-  console.log('='.repeat(80));
- 
-  marksData.forEach(({ slNo, courseCode, courseTitle, faculty, slot, marks }) => {
-    console.log(`\n[${slNo}] ${courseCode} - ${courseTitle}`);
-    console.log(`    Faculty: ${faculty} | Slot: ${slot}`);
-    if (marks && marks.length > 0) {
-      marks.forEach(mark => {
-        console.log(`    📝 ${mark.title}: ${mark.scored}/${mark.max} | Weight: ${mark.weightage}/${mark.percent}%`);
+  console.log('\n🎯 MARKS DASHBOARD\n' + '='.repeat(50));
+  marksData.forEach(course => {
+    const totalWeightage = course.marks.reduce((sum, mark) => sum + parseFloat(mark.weightage || 0), 0);
+    console.log(`\n📚 [${course.slNo}] ${course.courseCode} - ${course.courseTitle}`);
+    console.log(`👨‍🏫 ${course.faculty} | 🕐 ${course.slot} | 📊 Total: ${totalWeightage.toFixed(1)}`);
+    
+    if (course.marks.length) {
+      course.marks.forEach(mark => {
+        const percentage = ((parseFloat(mark.scored || 0) / parseFloat(mark.max || 1)) * 100).toFixed(1);
+        const status = percentage >= 70 ? '🟢' : percentage >= 50 ? '🟡' : '🔴';
+        console.log(`   ${status} ${mark.title}: ${mark.scored}/${mark.max} (${percentage}%) → ${mark.weightage}/${mark.percent}%`);
       });
     } else {
-      console.log('    📊 No marks available');
+      console.log('   ⏳ No marks posted yet');
     }
   });
-
-  console.log('\n' + '='.repeat(80));
 
   return marksData;
 }
 
+// Digital Assignment Function
+
 async function getDigitalAssignmentAjax(page, semesterSubId = 'VL20252601') {
   const { csrfToken, authorizedID } = await getAuthData(page);
   
+  // First request to get all subjects
   const subjectsResponse = await page.evaluate(async (payloadString) => {
     const res = await fetch('/vtop/examinations/doDigitalAssignment', {
       method: 'POST',
@@ -518,6 +203,7 @@ async function getDigitalAssignmentAjax(page, semesterSubId = 'VL20252601') {
     return await res.text();
   }, `authorizedID=${authorizedID}&x=${new Date().toUTCString()}&semesterSubId=${semesterSubId}&_csrf=${csrfToken}`);
 
+  // Parse subjects data
   const subjectsData = await page.evaluate((html) => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
@@ -534,9 +220,14 @@ async function getDigitalAssignmentAjax(page, semesterSubId = 'VL20252601') {
     }).filter(item => item.slNo && item.classNbr);
   }, subjectsResponse);
 
+  console.log('\n📋 DIGITAL ASSIGNMENTS - ALL SUBJECTS\n' + '='.repeat(60));
+
   // For each subject, get assignments
   for (const subject of subjectsData) {
+    console.log(`\n📚 [${subject.slNo}] ${subject.courseCode} - ${subject.courseTitle}`);
+    
     try {
+      // Get assignments for this subject
       const assignmentsResponse = await page.evaluate(async (payloadString) => {
         const res = await fetch('/vtop/examinations/processDigitalAssignment', {
           method: 'POST',
@@ -546,11 +237,15 @@ async function getDigitalAssignmentAjax(page, semesterSubId = 'VL20252601') {
         return await res.text();
       }, `_csrf=${csrfToken}&classId=${subject.classNbr}&authorizedID=${authorizedID}&x=${new Date().toUTCString()}`);
 
+      // Parse assignments - target only the second table (assignments table)
       const assignmentData = await page.evaluate((html) => {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = html;
         
+        // Find all tables
         const tables = Array.from(tempDiv.querySelectorAll('table.customTable'));
+        
+        // The assignments table is the second one (index 1)
         const assignmentTable = tables[1];
         if (!assignmentTable) return [];
         
@@ -558,6 +253,7 @@ async function getDigitalAssignmentAjax(page, semesterSubId = 'VL20252601') {
         
         return rows.map(row => {
           const cells = row.querySelectorAll('td');
+          // Skip if this looks like a header or has wrong number of cells
           if (cells.length < 5) return null;
           
           return {
@@ -568,101 +264,209 @@ async function getDigitalAssignmentAjax(page, semesterSubId = 'VL20252601') {
         }).filter(item => item && item.slNo && item.slNo !== 'Sl.No.');
       }, assignmentsResponse);
 
-      subject.assignments = assignmentData;
+      if (assignmentData.length > 0) {
+        assignmentData.forEach(({ slNo, title, dueDate }) => {
+          console.log(`   📝 [${slNo}] ${title} - Due: ${dueDate}`);
+        });
+      } else {
+        console.log('   ⏳ No assignments found');
+      }
     } catch (error) {
-      subject.assignments = [];
+      console.log('   ❌ Error fetching assignments');
     }
   }
-
-  // Print assignments data nicely
-  console.log('\n📋 DIGITAL ASSIGNMENTS SUMMARY:');
-  console.log('='.repeat(80));
- 
-  subjectsData.forEach(({ slNo, courseCode, courseTitle, assignments }) => {
-    console.log(`\n[${slNo}] ${courseCode} - ${courseTitle}`);
-    if (assignments && assignments.length > 0) {
-      assignments.forEach(assignment => {
-        console.log(`    📝 [${assignment.slNo}] ${assignment.title} - Due: ${assignment.dueDate}`);
-      });
-    } else {
-      console.log('    ⏳ No assignments found');
-    }
-  });
-
-  console.log('\n' + '='.repeat(80));
 
   return { subjects: subjectsData };
 }
 
-async function scrapeTimeTable(page) {
-  console.log('\n📅 Navigating to Time Table page...');
+// Grade View Function
+async function getGradeViewAjax(page, semesterSubId = 'VL20242505') {
+  const { csrfToken, authorizedID } = await getAuthData(page);
+  
+  // First request - navigate to grade view page
+  await page.evaluate(async (payloadString) => {
+    const res = await fetch('/vtop/examinations/examGradeView/StudentGradeView', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payloadString
+    });
+    return await res.text();
+  }, `verifyMenu=true&authorizedID=${authorizedID}&_csrf=${csrfToken}`);
 
-  // Click on timetable link
-  const clicked = await page.evaluate(() => {
-    const links = Array.from(document.querySelectorAll('a')).filter(
-      e => e.dataset?.url?.includes('academics/common/StudentTimeTable')
-    );
-    if (links.length > 0) {
-      links[0].click();
-      return true;
+  // Second request - get grades for specific semester
+  const response = await page.evaluate(async (payloadString) => {
+    const res = await fetch('/vtop/examinations/examGradeView/doStudentGradeView', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payloadString
+    });
+    return await res.text();
+  }, `authorizedID=${authorizedID}&_csrf=${csrfToken}&semesterSubId=${semesterSubId}`);
+
+  // Parse grades data
+  const gradesData = await page.evaluate((html) => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const rows = Array.from(tempDiv.querySelectorAll('tbody tr'));
+    
+    const courses = [];
+    let gpa = null;
+    
+    for (const row of rows) {
+      const cells = row.querySelectorAll('td');
+      
+      // Check if this is the GPA row
+      if (cells.length === 1 && cells[0].getAttribute('colspan') === '14') {
+        const gpaText = cells[0].innerText;
+        const gpaMatch = gpaText.match(/GPA\s*:\s*([0-9.]+)/);
+        if (gpaMatch) {
+          gpa = gpaMatch[1];
+        }
+        continue;
+      }
+      
+      // Skip header rows and empty rows
+      if (cells.length < 11 || cells[0].innerText.trim() === 'Sl.No.') continue;
+      
+      const course = {
+        slNo: cells[0]?.innerText.trim() || '',
+        courseCode: cells[1]?.innerText.trim() || '',
+        courseTitle: cells[2]?.innerText.trim() || '',
+        courseType: cells[3]?.innerText.trim() || '',
+        creditsL: cells[4]?.innerText.trim() || '',
+        creditsP: cells[5]?.innerText.trim() || '',
+        creditsJ: cells[6]?.innerText.trim() || '',
+        creditsC: cells[7]?.innerText.trim() || '',
+        gradingType: cells[8]?.innerText.trim() || '',
+        grandTotal: cells[9]?.innerText.trim() || '',
+        grade: cells[10]?.innerText.trim() || ''
+      };
+      
+      // Only add if it has valid data
+      if (course.slNo && course.courseCode) {
+        courses.push(course);
+      }
     }
-    return false;
+    
+    return { courses, gpa };
+  }, response);
+
+  console.log('\n🎓 GRADE REPORT\n' + '='.repeat(50));
+  console.log(`📊 Semester GPA: ${gradesData.gpa || 'N/A'}\n`);
+  
+  gradesData.courses.forEach(course => {
+    const totalCredits = parseFloat(course.creditsC || 0);
+    const gradeIcon = course.grade === 'S' ? '🌟' : 
+                     course.grade === 'A' ? '🟢' : 
+                     course.grade === 'B' ? '🟡' : 
+                     course.grade === 'C' ? '🟠' : '🔴';
+    
+    console.log(`${gradeIcon} [${course.slNo}] ${course.courseCode} - ${course.courseTitle}`);
+    console.log(`   📚 Type: ${course.courseType} | 🎯 Credits: ${totalCredits} | 📝 Score: ${course.grandTotal} | 🏆 Grade: ${course.grade}`);
   });
 
-  if (!clicked) {
-    console.log('❌ Time Table link not found.');
-    return;
-  }
+  return gradesData;
+}
+// Leave History Function
+async function getLeaveHistoryAjax(page) {
+  const { csrfToken, authorizedID } = await getAuthData(page);
+  
+  // First request - navigate to leave page
+  await page.evaluate(async (payloadString) => {
+    const res = await fetch('/vtop/hostels/student/leave/1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payloadString
+    });
+    return await res.text();
+  }, `verifyMenu=true&authorizedID=${authorizedID}&_csrf=${csrfToken}`);
 
-  await page.waitForLoadState('networkidle');
-  await page.waitForSelector('select#semesterSubId', { timeout: 15000 });
+  // Second request - get leave history
+  const response = await page.evaluate(async (payloadString) => {
+    const res = await fetch('/vtop/hostels/student/leave/6', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payloadString
+    });
+    return await res.text();
+  }, `_csrf=${csrfToken}&authorizedID=${authorizedID}&history=&form=undefined&control=history&x=${new Date().toUTCString()}`);
 
-  // Select semester
-  await page.selectOption('select#semesterSubId', 'VL20252601');
-  console.log('✅ Semester selected.');
-
-  // Wait for any table rows
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
-
-  const timetable = await page.evaluate(() => {
-    const table = document.querySelector('table tbody');
-    if (!table) return [];
-
-    const rows = Array.from(table.querySelectorAll('tr'));
+  // Parse leave history data
+  const leaveData = await page.evaluate((html) => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const rows = Array.from(tempDiv.querySelectorAll('#LeaveHistoryTable tbody tr'));
+    
     return rows.map(row => {
       const cells = row.querySelectorAll('td');
-      return {
-        day: cells[0]?.innerText.trim() || '',
-        slot: cells[1]?.innerText.trim() || '',
-        courseCode: cells[2]?.innerText.trim() || '',
-        courseTitle: cells[3]?.innerText.trim() || '',
-        faculty: cells[4]?.innerText.trim() || '',
-        venue: cells[5]?.innerText.trim() || ''
+      // Skip if not enough cells or hidden row
+      if (cells.length < 6) return null;
+      
+      const leave = {
+        visitPlace: cells[1]?.innerText.trim() || '',
+        reason: cells[2]?.innerText.trim() || '',
+        leaveType: cells[3]?.innerText.trim() || '',
+        fromDate: cells[4]?.innerText.trim() || '',
+        toDate: cells[5]?.innerText.trim() || '',
+        status: cells[6]?.innerText.trim() || ''
       };
-    }).filter(r => r.day && r.courseCode);
+      
+      // Only return if we have valid data
+      return leave.visitPlace ? leave : null;
+    }).filter(item => item !== null);
+  }, response);
+
+  console.log('\n🏠 LEAVE HISTORY\n' + '='.repeat(50));
+  
+  if (leaveData.length === 0) {
+    console.log('📋 No leave history found');
+    return leaveData;
+  }
+
+  leaveData.forEach((leave, index) => {
+    // Determine status icon
+    const statusIcon = leave.status.includes('APPROVED') ? '✅' : 
+                      leave.status.includes('CANCELLED') ? '❌' : 
+                      leave.status.includes('PENDING') ? '⏳' : '📋';
+    
+    // Determine leave type icon
+    const typeIcon = leave.leaveType.includes('SUMMER') ? '☀️' :
+                    leave.leaveType.includes('WINTER') ? '❄️' :
+                    leave.leaveType.includes('EMERGENCY') ? '🚨' :
+                    leave.leaveType.includes('HOME TOWN') ? '🏠' : '📅';
+    
+    console.log(`\n${statusIcon} ${typeIcon} [${index + 1}] ${leave.leaveType}`);
+    console.log(`   📍 Place: ${leave.visitPlace}`);
+    console.log(`   📝 Reason: ${leave.reason}`);
+    console.log(`   📅 Duration: ${leave.fromDate} → ${leave.toDate}`);
+    console.log(`   📋 Status: ${leave.status}`);
   });
 
-  // Print full weekly timetable
-  console.log('\n📅 Weekly Timetable:');
-  timetable.forEach(({ day, slot, courseCode, courseTitle, faculty, venue }) => {
-    console.log(`\n${day} - [${slot}]`);
-    console.log(`   ${courseCode} - ${courseTitle}`);
-    console.log(`   Faculty: ${faculty} | Venue: ${venue}`);
-  });
+  // Summary statistics
+  const totalLeaves = leaveData.length;
+  const approvedLeaves = leaveData.filter(l => l.status.includes('APPROVED')).length;
+  const cancelledLeaves = leaveData.filter(l => l.status.includes('CANCELLED')).length;
+  
+  console.log(`\n📊 LEAVE SUMMARY:`);
+  console.log(`   Total Applications: ${totalLeaves}`);
+  console.log(`   ✅ Approved: ${approvedLeaves}`);
+  console.log(`   ❌ Cancelled/Rejected: ${cancelledLeaves}`);
+  console.log(`   📈 Success Rate: ${((approvedLeaves / totalLeaves) * 100).toFixed(1)}%`);
 
-  return timetable;
+  return leaveData;
 }
-
 // ===== CAPTCHA SOLVER =====
 async function solveCaptcha(page) {
   await page.waitForSelector('img.form-control.img-fluid.bg-light.border-0', { timeout: 10000 });
- 
+  
   const captchaDataUrl = await page.evaluate(() => {
     const img = document.querySelector('img.form-control.img-fluid.bg-light.border-0');
     return img ? img.src : null;
   });
 
   let captchaBuffer;
+  const folderPath = path.join(__dirname, 'sample-captchas');
+  if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
 
   if (captchaDataUrl && captchaDataUrl.startsWith('data:image')) {
     const base64Data = captchaDataUrl.split(',')[1];
@@ -671,20 +475,20 @@ async function solveCaptcha(page) {
 
   console.log('🧠 Solving with ViBoOT neural network...');
   const result = await solveUsingViboot(captchaBuffer);
- 
+  
   console.log('✅ ViBoOT CAPTCHA result:', result);
   await page.fill('#captchaStr', result);
   return result;
 }
 
 // ===== MAIN FUNCTION =====
-async function testVtopLogin() {
+async function testVtopLoginWithAjax() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.setDefaultTimeout(240000);
 
   try {
-    console.log('🔍 Testing VTOP login...');
+    console.log('🔍 Testing VTOP login with AJAX CGPA fetch...');
     await page.goto('https://vtop.vit.ac.in/vtop/login');
     await page.waitForSelector('#stdForm', { timeout: 10000 });
     await page.click('#stdForm button[type="submit"]');
@@ -736,16 +540,16 @@ async function testVtopLogin() {
     while (!loginSuccess && captchaAttempts < maxCaptchaAttempts) {
       captchaAttempts++;
       console.log(`🔄 CAPTCHA attempt ${captchaAttempts}/${maxCaptchaAttempts}`);
-     
+      
       console.log('✅ Captcha entered, waiting 1 seconds before submitting...');
-      await page.waitForTimeout(1000);
+      // await page.waitForTimeout(1000);
 
       console.log('⏩ Now clicking submit...');
       await page.click('button:has-text("Submit")');
-     
+      
       try {
         await page.waitForLoadState('networkidle', { timeout: 30000 });
-        await page.waitForTimeout(3000);
+        // await page.waitForTimeout(3000);
 
         loginSuccess = await page.evaluate(() => {
           return Array.from(document.querySelectorAll('.card-header.primaryBorderTop span'))
@@ -756,52 +560,27 @@ async function testVtopLogin() {
           console.log('🎉 LOGIN SUCCESSFUL!');
           console.log('Current URL:', await page.url());
 
-          // ===== COMPREHENSIVE DATA EXTRACTION =====
-          console.log('\n🚀 Starting comprehensive data extraction...');
-         
-          // Extract CGPA using AJAX
-          console.log('\n🌟 Fetching CGPA...');
+          console.log('\n🚀 Starting AJAX data extraction...');
+          
           await getCGPAAjax(page);
-
-          // // Extract Login History
-          // console.log('\n🕐 Fetching Login History...');
-          // const loginHistory = await getLoginHistoryAjax(page);
-          // console.log('Login History:', loginHistory);
-
-          // Extract Attendance using AJAX
-          // console.log('\n📊 Fetching Attendance...');
-          // await getAttendanceAjax(page);
-
-          await getTimetableAjax(page);
-
-          // console.log('\n📊 Fetching scedule...');
-
-          // await getExamScheduleAjax(page);
-
-          // // Extract Marks using AJAX
-          // console.log('\n📝 Fetching Marks...');
-          // await getMarkViewAjax(page);
-
-          // // Extract Digital Assignments using AJAX
-          // console.log('\n📋 Fetching Digital Assignments...');
-          // await getDigitalAssignmentAjax(page);
-
-          // Extract Timetable
-          // console.log('\n📅 Fetching Timetable...');
-          // // await scrapeTimeTable(page);
-
-          console.log('\n✅ All data extraction completed!');
-          break;
+          //  await getLoginHistoryAjax(page);
+  // await getAttendanceAjax(page);
+  // await getMarkViewAjax(page);
+  // await getDigitalAssignmentAjax(page);
+  //await getGradeViewAjax(page);
+  await getLeaveHistoryAjax(page);
+  
+  break;
         }
 
         const backAtLogin = await page.$('#username');
         if (backAtLogin && captchaAttempts < maxCaptchaAttempts) {
           console.log(`❌ Invalid CAPTCHA - page reloaded (attempt ${captchaAttempts})`);
           console.log('🔄 Trying again with new CAPTCHA...');
-         
+          
           await page.fill('#username', username);
           await page.fill('#password', password);
-         
+          
           await solveCaptcha(page);
         } else {
           console.log('❌ LOGIN FAILED - unknown error');
@@ -829,6 +608,6 @@ async function testVtopLogin() {
 }
 
 // ===== RUN THE SCRIPT =====
-testVtopLogin().then(success => {
+testVtopLoginWithAjax().then(success => {
   console.log('Final result - Login success:', success);
 });
