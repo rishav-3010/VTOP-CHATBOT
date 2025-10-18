@@ -1,3 +1,5 @@
 node_modules/
 .env
 mock
+vtop-auth.js
+vtop-functions.js
